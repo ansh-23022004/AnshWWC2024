@@ -1,1 +1,18 @@
+Problem: 3 Data
 
+#include <iostream>
+
+using namespace std;
+
+int main() {
+    cout << "Name: Ansh" << endl;
+    cout << "UID: 22BCS10112" << endl;
+    cout << "Section: 630 B" << endl;
+    cout << "Area of Interest: LUDO" << endl;
+    cout << "Age: [Your Age]" << endl;
+    cout << "Last Year CGPA: 7.1" << endl;
+    cout << "DOB: 21/07/2003" << endl;
+    cout << "Hometown: Ranchi,JHARKHAND" << endl;
+
+    return 0;
+}
