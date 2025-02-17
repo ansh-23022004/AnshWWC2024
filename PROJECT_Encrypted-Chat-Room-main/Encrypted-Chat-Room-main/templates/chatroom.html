@@ -1,0 +1,1322 @@
+<!-- templates/chatroom.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="color-scheme" content="light dark">
+    <title>Secure Chat Room</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        :root {
+            --imessage-blue: #007AFF;
+            --imessage-gray: #E9E9EB;
+            --system-gray: #8E8E93;
+            --background: #FFFFFF;
+            --border-color: #E5E5E5;
+            --text-primary: #000000;
+            --text-secondary: #8E8E93;
+            --message-received-bg: #E9E9EB;
+            --message-received-text: #000000;
+            --message-sent-bg: #007AFF;
+            --message-sent-text: #FFFFFF;
+            --input-bg: #FFFFFF;
+            --chat-bg: #FFFFFF;
+        }
+
+        /* Dark theme variables */
+        [data-theme="dark"] {
+            --background: #000000;
+            --border-color: #1C1C1E;
+            --text-primary: #FFFFFF;
+            --text-secondary: #98989F;
+            --message-received-bg: #1C1C1E;
+            --message-received-text: #FFFFFF;
+            --message-sent-bg: #0A84FF;
+            --message-sent-text: #FFFFFF;
+            --input-bg: #1C1C1E;
+            --system-gray: #98989F;
+            --chat-bg: #000000;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 
+                         'SF Pro Icons', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background: var(--background);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overscroll-behavior-y: contain;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+
+        .container {
+            padding: 10px;
+            max-width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .room-info {
+            padding: 12px 16px;
+            border-bottom: 0.5px solid var(--border-color);
+            margin-bottom: 16px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            background: var(--background);
+        }
+
+        .room-info h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .room-stats {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            align-items: center;
+            margin-top: 8px;
+        }
+
+        .room-stats p {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--system-gray);
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .room-stats i {
+            font-size: 15px;
+            color: var(--system-gray);
+            opacity: 0.9;
+        }
+
+        #timer, #count {
+            font-weight: 600;
+            color: var(--imessage-blue);
+        }
+
+        #chat {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            padding-bottom: 100px;
+            background: var(--chat-bg);
+            margin-bottom: 0;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .message {
+            margin: 6px 0;
+            display: flex;
+            flex-direction: column;
+            max-width: 75%;
+        }
+
+        .message.sent {
+            margin-left: auto;
+            align-items: flex-end;
+        }
+
+        .message.received {
+            margin-right: auto;
+            align-items: flex-start;
+        }
+
+        .message-content {
+            padding: 8px 12px;
+            border-radius: 16px;
+            margin: 2px 0;
+            word-wrap: break-word;
+            max-width: 100%;
+            font-size: 15px;
+            line-height: 1.3;
+        }
+
+        .message.sent .message-content {
+            background: var(--message-sent-bg);
+            color: var(--message-sent-text);
+        }
+
+        .message.received .message-content {
+            background: var(--message-received-bg);
+            color: var(--message-received-text);
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: var(--system-gray);
+            margin-top: 2px;
+            padding: 0 4px;
+            align-self: flex-end;
+        }
+
+        .message.received .message-time {
+            align-self: flex-start;
+        }
+
+        .message-sender {
+            font-size: 12px;
+            color: var(--system-gray);
+            margin-bottom: 2px;
+            padding: 0 4px;
+        }
+
+        .input-area {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 12px 16px;
+            background: var(--background);
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            z-index: 1000;
+            border-top: 0.5px solid var(--border-color);
+            transition: transform 0.3s ease;
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+        }
+
+        textarea {
+            flex-grow: 1;
+            padding: 8px 14px;
+            border: none;
+            border-radius: 18px;
+            background: var(--input-bg);
+            font-size: 15px;
+            transition: all 0.3s ease;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            resize: none;
+            min-height: 45px;
+            max-height: 160px;
+            line-height: 1.4;
+            font-family: inherit;
+            overflow-y: scroll;
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+            color: var(--text-primary);
+        }
+
+        /* Hide scrollbar by default */
+        textarea::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Only show scrollbar when user is actively scrolling */
+        textarea.scrolling::-webkit-scrollbar {
+            display: block;
+            width: 6px;
+        }
+
+        textarea.scrolling::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        textarea.scrolling::-webkit-scrollbar-thumb {
+            background: var(--system-gray);
+            border-radius: 3px;
+        }
+
+        textarea:focus {
+            outline: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        button {
+            background: transparent;
+            border: none;
+            color: var(--imessage-blue);
+            font-size: 16px;
+            font-weight: 600;
+            padding: 8px 15px;
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+        }
+
+        button:hover {
+            opacity: 0.8;
+        }
+
+        @keyframes message-pop {
+            from {
+                opacity: 0;
+                transform: translateY(10px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        /* Typing indicator animation */
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 8px 12px;
+            background: var(--imessage-gray);
+            border-radius: 15px;
+            width: fit-content;
+            margin: 8px 0;
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--system-gray);
+            border-radius: 50%;
+            animation: typing-bounce 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing-bounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-4px); }
+        }
+
+        /* macOS-style notifications */
+        .join-request-notification {
+            position: fixed;
+            width: 300px;
+            top: 20px;          /* Position from top */
+            right: 20px;        /* Position from right */
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 20px var(--shadow-color);
+            z-index: 1000;
+            border: 1px solid var(--border-color);
+            animation: slideIn 0.3s ease;  /* Smooth entry animation */
+        }
+
+        /* Add animation for smooth entry */
+        @keyframes slideIn {
+            from {
+                transform: translateY(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        /* Mobile responsive positioning */
+        @media (max-width: 768px) {
+            .join-request-notification {
+                width: 90%;
+                max-width: 350px;
+                right: 50%;          /* Center horizontally */
+                transform: translateX(50%);  /* Center horizontally */
+            }
+        }
+
+        .notification-content {
+            margin-bottom: 12px;
+            color: var(--text-primary);
+            font-size: 15px;
+        }
+
+        .notification-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .notification-button {
+            flex: 1;
+            padding: 8px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .notification-button.accept {
+            background: var(--imessage-blue);
+            color: white;
+        }
+
+        .notification-button.deny {
+            background: var(--message-received-bg);
+            color: var(--text-primary);
+        }
+
+        .notification-button:hover {
+            opacity: 0.9;
+        }
+
+        /* Add styles for approval status */
+        .approval-status {
+            font-size: 12px;
+            color: var(--system-gray);
+            margin-top: 4px;
+        }
+
+        /* Add this for system messages */
+        .system-message {
+            text-align: center;
+            margin: 10px 0;
+            padding: 8px 0;
+        }
+
+        .system-message span {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 10px;
+            font-size: 13px;
+            background: var(--message-received-bg);
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+                max-width: 100%;
+            }
+
+            #chat {
+                height: calc(100vh - 180px);
+                padding: 10px;
+                padding-bottom: 60px;
+                margin-bottom: 0;
+            }
+
+            .message-content {
+                max-width: 85%;
+                font-size: 14px;
+            }
+
+            .input-area {
+                padding: 10px;
+                background: var(--background);
+                position: fixed;
+                bottom: env(safe-area-inset-bottom, 0);
+                left: 0;
+                right: 0;
+            }
+
+            textarea {
+                padding: 8px 15px;
+                font-size: 16px;
+            }
+
+            .join-request-notification {
+                width: 90%;
+                left: 50%;
+                transform: translateX(-50%);
+                right: auto;
+            }
+
+            .message-wrapper {
+                max-width: 85%;
+            }
+        }
+
+        @supports (-webkit-touch-callout: none) {
+            .input-area {
+                padding-bottom: max(15px, env(safe-area-inset-bottom));
+            }
+
+            #chat {
+                -webkit-overflow-scrolling: touch;
+                overscroll-behavior: contain;
+            }
+        }
+
+        /* Prevent pull-to-refresh */
+        body {
+            overscroll-behavior-y: contain;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Style the scrollbar for the textarea */
+        textarea::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        textarea::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        textarea::-webkit-scrollbar-thumb {
+            background: var(--system-gray);
+            border-radius: 3px;
+        }
+
+        /* Update chat container margin for expanded textarea */
+        #chat {
+            height: calc(100vh - 180px);
+            margin-bottom: 0;
+            overflow-y: scroll;
+            padding: 20px;
+            background: var(--chat-bg);
+            transition: background-color 0.3s ease;
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        #chat::-webkit-scrollbar {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            textarea {
+                font-size: 16px;
+                line-height: 1.4;
+                min-height: 45px;
+                max-height: 160px; /* Keep same height for mobile */
+            }
+        }
+
+        /* Chat scrollbar styling */
+        #chat::-webkit-scrollbar {
+            width: 6px; /* Thinner width */
+        }
+
+        #chat:hover::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #chat:hover::-webkit-scrollbar-thumb {
+            background: var(--system-gray);  /* Use system gray instead of rgba black */
+            border-radius: 3px;
+            transition: background 0.2s ease;
+        }
+
+        #chat:hover::-webkit-scrollbar-thumb:hover {
+            background: var(--system-gray);  /* Use system gray instead of rgba black */
+            opacity: 0.8;  /* Just change opacity for hover effect */
+        }
+
+        /* Textarea scrollbar styling */
+        textarea.scrolling::-webkit-scrollbar {
+            width: 6px; /* Match chat scrollbar width */
+        }
+
+        textarea.scrolling::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        textarea.scrolling::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+            transition: background 0.2s ease;
+        }
+
+        textarea.scrolling::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .room-info p {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: var(--system-gray);
+            font-size: 15px;
+        }
+
+        /* Style for the icons */
+        .room-info p::first-letter {
+            font-size: 16px;
+            color: var(--system-gray);
+            opacity: 0.9;
+        }
+
+        /* Adjust the spacing and alignment */
+        #timer, #count {
+            font-weight: 600;
+            color: var(--imessage-blue);
+        }
+
+        .code-container {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 16px;  /* Space between code and eye icon */
+        }
+
+        .code-wrapper {
+            position: relative;
+            display: inline-block;
+            min-width: 80px;  /* Ensure consistent width for the code */
+        }
+
+        .code-hidden, .code-actual {
+            transition: opacity 0.3s ease;
+        }
+
+        .code-actual {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            display: flex;
+            gap: 2px;
+            white-space: nowrap;
+        }
+
+        .code-hidden {
+            opacity: 1;
+            color: var(--imessage-blue);
+            letter-spacing: 2px;
+            font-weight: bold;
+        }
+
+        .toggle-code {
+            background: none;
+            border: none;
+            padding: 6px 8px;
+            cursor: pointer;
+            color: var(--imessage-blue);
+            opacity: 0.8;
+            transition: background-color 0.2s ease;
+            border-radius: 6px;
+        }
+
+        .toggle-code:hover {
+            background-color: rgba(0,122,255,0.1);
+        }
+
+        .digit {
+            display: inline-block;
+            color: var(--imessage-blue);
+        }
+
+        /* Show/hide animation */
+        .code-container.show .code-hidden {
+            opacity: 0;
+        }
+
+        .code-container.show .code-actual {
+            opacity: 1;
+        }
+
+        /* Add these styles */
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        #theme-switch {
+            background: var(--card-bg);
+            border: none;
+            padding: 12px;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 10px var(--shadow-color);
+            transition: all 0.3s ease;
+        }
+
+        #theme-switch i {
+            color: var(--text-primary);
+            font-size: 18px;
+            transition: transform 0.3s ease;
+        }
+
+        #theme-switch:hover {
+            transform: scale(1.05);
+        }
+
+        /* Animation for icon switch */
+        #theme-switch.dark i {
+            transform: rotate(360deg);
+        }
+
+        /* iOS-style blur effect */
+        @supports (-webkit-backdrop-filter: none) or (backdrop-filter: none) {
+            #theme-switch {
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                background: var(--card-bg);
+            }
+        }
+
+        /* Join request notification styling */
+        .join-request {
+            margin: 10px 0;
+            padding: 15px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Style for the join request text */
+        .join-request span {
+            color: var(--text-primary);
+            font-size: 15px;
+        }
+
+        /* Style for the join request buttons */
+        .join-request button {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+        }
+
+        .join-request button.accept {
+            background: var(--imessage-blue);
+            color: white;
+        }
+
+        .join-request button.deny {
+            background: var(--system-gray);
+            color: white;
+            opacity: 0.9;
+        }
+
+        .join-request button:hover {
+            opacity: 0.8;
+        }
+
+        /* Join request message specific styling */
+        .join-request-message {
+            color: var(--text-primary) !important;
+            background: var(--message-received-bg);
+            padding: 8px 16px;
+            border-radius: 12px;
+            margin: 10px auto;
+            text-align: center;
+            font-size: 14px;
+            max-width: 80%;
+            box-shadow: 0 2px 5px var(--shadow-color);
+        }
+
+        /* Style for the buttons container */
+        .join-request-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        /* Optimize chat container for mobile */
+        #chat {
+            -webkit-overflow-scrolling: touch;  /* Enable smooth scrolling on iOS */
+            overscroll-behavior: contain;       /* Prevent pull-to-refresh */
+            height: calc(100vh - 180px);        /* Adjust height for mobile */
+            padding-bottom: 60px;               /* Add padding for input area */
+            will-change: transform;             /* Optimize for scrolling performance */
+        }
+
+        /* Prevent body scroll when modal is open */
+        body {
+            overscroll-behavior-y: contain;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* iOS-specific optimizations */
+        @supports (-webkit-touch-callout: none) {
+            .input-area {
+                /* Account for iOS bottom safe area */
+                padding-bottom: max(15px, env(safe-area-inset-bottom));
+            }
+
+            #chat {
+                /* Enable momentum scrolling */
+                -webkit-overflow-scrolling: touch;
+                /* Prevent overscroll */
+                overscroll-behavior: contain;
+            }
+        }
+
+        /* Mobile-specific adjustments */
+        @media (max-width: 768px) {
+            #chat {
+                height: calc(100vh - 180px);
+                padding: 10px;
+                padding-bottom: 60px;
+                margin-bottom: 0;
+            }
+
+            .message-content {
+                max-width: 85%;
+                font-size: 14px;
+            }
+
+            .input-area {
+                padding: 10px;
+                background: var(--background);
+                position: fixed;
+                bottom: env(safe-area-inset-bottom, 0);
+                left: 0;
+                right: 0;
+            }
+
+            textarea {
+                padding: 8px 15px;
+                font-size: 16px;  /* Prevent zoom on iOS */
+            }
+        }
+
+        /* Optimize scrollbar for touch devices */
+        @media (hover: none) and (pointer: coarse) {
+            #chat::-webkit-scrollbar {
+                width: 0;
+                height: 0;
+            }
+        }
+
+        /* Chat container adjustments */
+        #chat {
+            height: calc(100vh - 180px);
+            overflow-y: auto;
+            padding: 20px;
+            background: var(--chat-bg);
+            margin-bottom: 70px;  /* Add margin to prevent text cutoff */
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+            will-change: transform;
+        }
+
+        /* Mobile-specific adjustments */
+        @media (max-width: 768px) {
+            #chat {
+                height: calc(100vh - 120px);  /* Adjusted height */
+                padding: 15px;
+                padding-bottom: 100px;        /* Increased bottom padding */
+                margin-bottom: 60px;          /* Space for input area */
+            }
+
+            .input-area {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                padding: 12px;
+                background: var(--background);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                border-top: 0.5px solid var(--border-color);
+                z-index: 1000;
+            }
+
+            /* Container adjustment */
+            .container {
+                padding: 10px;
+                padding-bottom: 70px;  /* Add padding to container */
+                max-width: 100%;
+                height: 100vh;
+                position: relative;
+            }
+        }
+
+        /* iOS-specific adjustments */
+        @supports (-webkit-touch-callout: none) {
+            .input-area {
+                padding-bottom: max(15px, env(safe-area-inset-bottom));
+            }
+
+            #chat {
+                padding-bottom: calc(100px + env(safe-area-inset-bottom));
+            }
+        }
+
+        /* Ensure messages don't get cut off at the bottom */
+        .message {
+            margin: 6px 0;
+            max-width: 75%;
+        }
+
+        .message:last-child {
+            margin-bottom: 20px;  /* Add extra margin to last message */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="room-info">
+            <h2>Room Code: 
+                <span class="code-container">
+                    <span class="code-wrapper">
+                        <span class="code-hidden">••••••</span>
+                        <div class="code-actual">
+                            {% for digit in display_code %}
+                            <span class="digit">{{ digit }}</span>
+                            {% endfor %}
+                        </div>
+                    </span>
+                    <button class="toggle-code" aria-label="Toggle code visibility">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </span>
+            </h2>
+            <div class="room-stats">
+                <p><i class="far fa-clock"></i> <span id="timer">{{ initial_time }}</span></p>
+                <p><i class="far fa-user"></i> <span id="count">{{ participant_count }}</span></p>
+            </div>
+        </div>
+        
+        <div id="chat"></div>
+        
+        
+    </div>
+    <div class="input-area">
+        <textarea id="message-input" 
+                  placeholder="Type a message..." 
+                  rows="1"
+                  onkeypress="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }"></textarea>
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <div class="theme-toggle">
+        <button id="theme-switch" aria-label="Toggle dark mode">
+            <i class="fas fa-moon"></i>
+        </button>
+    </div>
+
+    <script>
+        const socket = io();
+        
+        // Join the room
+        socket.emit('join', {
+            room: "{{ room_code }}",
+            display_name: "{{ session['display_name'] }}"
+        });
+
+        // Handle successful join
+        socket.on('join_success', function(data) {
+            console.log('Successfully joined room:', data);
+            updateParticipantCount(data.count);
+        });
+
+        // Update participant count - broadcast to all
+        socket.on('update_participants', function(data) {
+            console.log('Participant update received:', data);
+            updateParticipantCount(data.count);
+        });
+
+        function updateParticipantCount(count) {
+            console.log('Updating participant count to:', count);
+            const countElement = document.getElementById('count');
+            if (countElement) {
+                countElement.textContent = count;
+            }
+        }
+
+        // Handle disconnection
+        window.addEventListener('beforeunload', function(e) {
+            e.preventDefault();
+            socket.emit('leave_room', {
+                room: "{{ room_code }}",
+                display_name: "{{ session['display_name'] }}"
+            });
+            // Give some time for the leave_room event to be sent
+            return null;
+        });
+
+        // Handle room errors
+        socket.on('room_error', function(data) {
+            alert(data.message || "Error with the room");
+            window.location.href = '/';
+        });
+
+        // Keep alive ping to maintain connection
+        setInterval(() => {
+            socket.emit('ping_room', {
+                room: "{{ room_code }}"
+            });
+        }, 30000);  // Every 30 seconds
+
+        // Handle room status check
+        socket.on('room_status', function(data) {
+            if (!data.exists) {
+                alert("This room no longer exists.");
+                window.location.href = '/';
+            }
+        });
+
+        // Simplified message handler without reply functionality
+        socket.on('message', function(data) {
+            const chat = document.getElementById('chat');
+            const messageDiv = document.createElement('div');
+            const isCurrentUser = data.sender === "{{ session['display_name'] }}";
+            
+            messageDiv.className = `message ${isCurrentUser ? 'sent' : 'received'}`;
+            
+            messageDiv.innerHTML = `
+                ${!isCurrentUser ? `<div class="message-sender">${data.sender}</div>` : ''}
+                <div class="message-content">${data.content}</div>
+                <div class="message-time">${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
+            `;
+            
+            chat.appendChild(messageDiv);
+            
+            // Smooth scroll to bottom
+            requestAnimationFrame(() => {
+                chat.scrollTo({
+                    top: chat.scrollHeight,
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // Simplified send message function
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (message) {
+                socket.emit('message', {
+                    room: "{{ room_code }}",
+                    message: message
+                });
+                messageInput.value = '';
+                
+                // Reset height without animation
+                messageInput.style.height = '45px';
+                
+                const chat = document.getElementById('chat');
+                chat.style.marginBottom = '80px';
+                
+                messageInput.focus();
+            }
+        }
+
+        // Timer functionality
+        let timeRemaining = {{ initial_time }};
+        
+        function updateTimer() {
+            const minutes = Math.floor(timeRemaining / 60);
+            const seconds = timeRemaining % 60;
+            const formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            document.getElementById('timer').textContent = formattedTime;
+        }
+
+        const timerInterval = setInterval(() => {
+            timeRemaining--;
+            if (timeRemaining < 0) {
+                timeRemaining = 300; // Reset to 5 minutes
+            }
+            updateTimer();
+        }, 1000);
+
+        // Handle code updates from server
+        socket.on('code_update', function(data) {
+            document.querySelector('.room-info h2').textContent = `Room Code: ${data.new_code}`;
+        });
+
+        // Add this handler for join announcements
+        socket.on('member_joined', function(data) {
+            const chat = document.getElementById('chat');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'system-message';
+            messageDiv.innerHTML = `<span>${data.display_name} joined the chat</span>`;
+            chat.appendChild(messageDiv);
+            chat.scrollTop = chat.scrollHeight;
+        });
+
+        // Add this handler for leave announcements
+        socket.on('member_left', function(data) {
+            const chat = document.getElementById('chat');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'system-message';
+            messageDiv.innerHTML = `<span>${data.display_name} left the chat</span>`;
+            chat.appendChild(messageDiv);
+            chat.scrollTop = chat.scrollHeight;
+        });
+
+        // Restore notification handling
+        socket.on('join_request', function(data) {
+            console.log('Join request received:', data);
+            const notificationId = `notification-${data.user_id}`;
+            
+            if (!document.getElementById(notificationId)) {
+                const notification = document.createElement('div');
+                notification.id = notificationId;
+                notification.className = 'join-request-notification';
+                notification.innerHTML = `
+                    <div class="notification-content">
+                        <strong>${data.user}</strong> wants to join the chat
+                        <div class="approval-status" id="status-${data.user_id}">
+                            Waiting for all members to approve...
+                        </div>
+                    </div>
+                    <div class="notification-buttons">
+                        <button onclick="handleJoinRequest('${data.user_id}', true)" 
+                                class="notification-button accept">Accept</button>
+                        <button onclick="handleJoinRequest('${data.user_id}', false)" 
+                                class="notification-button deny">Decline</button>
+                    </div>
+                `;
+                document.body.appendChild(notification);
+
+                // Add closing animation class
+                notification.classList.add('slide-in');
+
+                // Auto-remove after 60 seconds
+                setTimeout(() => {
+                    if (notification.parentElement) {
+                        removeNotification(notification);
+                    }
+                }, 60000);
+            }
+        });
+
+        // Function to remove notification with animation
+        function removeNotification(notification) {
+            notification.classList.add('slide-out');
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, 500); // Match this with the animation duration
+        }
+
+        function handleJoinRequest(userId, approved) {
+            const notification = document.getElementById(`notification-${userId}`);
+            
+            if (notification) {
+                // Add a brief status message before removing
+                const statusElement = notification.querySelector('.approval-status');
+                if (statusElement) {
+                    statusElement.textContent = approved ? 'You approved the request' : 'You denied the request';
+                }
+                
+                // Remove notification after a brief delay
+                setTimeout(() => {
+                    removeNotification(notification);
+                }, 1000);
+            }
+            
+            socket.emit(approved ? 'approve_join' : 'deny_join', {
+                user_id: userId,
+                room: "{{ room_code }}"
+            });
+        }
+
+        // Add touch event handling for mobile
+        document.addEventListener('touchmove', function(e) {
+            if (e.target.id !== 'chat') {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // Improve mobile keyboard handling
+        const messageInput = document.getElementById('message-input');
+        messageInput.addEventListener('focus', () => {
+            setTimeout(() => {
+                window.scrollTo(0, document.body.scrollHeight);
+            }, 300);
+        });
+
+        // Add scroll event listener
+        messageInput.addEventListener('scroll', function() {
+            if (!this.classList.contains('scrolling')) {
+                this.classList.add('scrolling');
+                
+                // Remove the class after scrolling stops
+                clearTimeout(this.scrollTimeout);
+                this.scrollTimeout = setTimeout(() => {
+                    this.classList.remove('scrolling');
+                }, 1000); // Hide scrollbar 1 second after scrolling stops
+            }
+        });
+
+        // Update the input handler
+        messageInput.addEventListener('input', function() {
+            const scrollTop = this.scrollTop;
+            this.style.height = '45px';
+            const newHeight = Math.min(this.scrollHeight, 160);
+            this.style.height = newHeight + 'px';
+            this.scrollTop = scrollTop;
+            
+            const chat = document.getElementById('chat');
+            chat.style.marginBottom = (newHeight + 80) + 'px';
+        });
+
+        // Keep the Enter key handler
+        messageInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Add vibration feedback for notifications (if supported)
+        socket.on('join_request', function(data) {
+            if (navigator.vibrate) {
+                navigator.vibrate(200);
+            }
+            // ... rest of the join_request handler
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const codeContainer = document.querySelector('.code-container');
+            const toggleButton = document.querySelector('.toggle-code');
+            let hideTimeout;  // Variable to store the timeout
+
+            function hideCode() {
+                codeContainer.classList.remove('show');
+                const icon = toggleButton.querySelector('i');
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+
+            function startHideTimer() {
+                // Clear any existing timeout
+                if (hideTimeout) {
+                    clearTimeout(hideTimeout);
+                }
+                // Set new timeout for 10 seconds
+                hideTimeout = setTimeout(hideCode, 10000);
+            }
+            
+            toggleButton.addEventListener('click', function() {
+                codeContainer.classList.toggle('show');
+                const icon = this.querySelector('i');
+                
+                if (codeContainer.classList.contains('show')) {
+                    icon.classList.remove('fa-eye');
+                    icon.classList.add('fa-eye-slash');
+                    startHideTimer();  // Start the timer when showing code
+                } else {
+                    icon.classList.remove('fa-eye-slash');
+                    icon.classList.add('fa-eye');
+                    // Clear timeout if manually hidden
+                    if (hideTimeout) {
+                        clearTimeout(hideTimeout);
+                    }
+                }
+            });
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const themeSwitch = document.getElementById('theme-switch');
+            const icon = themeSwitch.querySelector('i');
+            
+            // Check for saved theme preference or default to system preference
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme) {
+                document.documentElement.setAttribute('data-theme', savedTheme);
+                updateIcon(savedTheme);
+            }
+
+            themeSwitch.addEventListener('click', () => {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                
+                // Save theme preference
+                localStorage.setItem('theme', newTheme);
+                document.documentElement.setAttribute('data-theme', newTheme);
+                
+                // Update icon
+                updateIcon(newTheme);
+            });
+
+            function updateIcon(theme) {
+                if (theme === 'dark') {
+                    icon.classList.remove('fa-sun');
+                    icon.classList.add('fa-moon');
+                    themeSwitch.classList.add('dark');
+                } else {
+                    icon.classList.remove('fa-moon');
+                    icon.classList.add('fa-sun');
+                    themeSwitch.classList.remove('dark');
+                }
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const messageInput = document.getElementById('message-input');
+            const inputArea = document.querySelector('.input-area');
+            const chat = document.getElementById('chat');
+            
+            // Function to detect Safari
+            const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+            // Function to detect mobile device
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            
+            if (isMobile) {
+                // Handle input focus (keyboard appears)
+                messageInput.addEventListener('focus', function() {
+                    setTimeout(() => {
+                        const viewportHeight = window.visualViewport.height;
+                        const bottomOffset = window.innerHeight - viewportHeight;
+                        
+                        // Special handling for Safari
+                        if (isSafari) {
+                            // Adjust the bottom offset for Safari
+                            const safariFix = bottomOffset - (bottomOffset * 0.1); // Reduce the offset by 10%
+                            inputArea.style.bottom = `${safariFix}px`;
+                            
+                            // Adjust chat container
+                            chat.style.height = `${viewportHeight - inputArea.offsetHeight}px`;
+                        } else {
+                            inputArea.style.bottom = `${bottomOffset}px`;
+                        }
+                        
+                        // Scroll chat to bottom
+                        chat.scrollTop = chat.scrollHeight;
+                    }, 100);
+                });
+
+                // Handle input blur (keyboard disappears)
+                messageInput.addEventListener('blur', function() {
+                    inputArea.style.bottom = '0';
+                    chat.style.height = ''; // Reset chat height
+                });
+
+                // Handle viewport changes
+                window.visualViewport.addEventListener('resize', function() {
+                    if (document.activeElement === messageInput) {
+                        const viewportHeight = window.visualViewport.height;
+                        const bottomOffset = window.innerHeight - viewportHeight;
+                        
+                        if (isSafari) {
+                            const safariFix = bottomOffset - (bottomOffset * 0.1);
+                            inputArea.style.bottom = `${safariFix}px`;
+                            chat.style.height = `${viewportHeight - inputArea.offsetHeight}px`;
+                        } else {
+                            inputArea.style.bottom = `${bottomOffset}px`;
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: secure-chat
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --worker-class eventlet -w 1 --timeout 120 main:app
+    envVars:
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: WEB_CONCURRENCY
+        value: 1
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHONWARNINGS
+        value: ignore
+      - key: LOG_LEVEL
+        value: WARNING 

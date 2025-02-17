@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Waiting for Approval</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
+    <meta name="color-scheme" content="light dark">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        :root {
+            --imessage-blue: #0B93F6;
+            --imessage-gray: #E9E9EB;
+            --system-gray: #8E8E93;
+            --background: #ffffff;
+            --border-color: #E5E5E5;
+            --text-primary: #000000;
+            --text-secondary: #8E8E93;
+            --card-bg: #FFFFFF;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="dark"] {
+            --background: #000000;
+            --text-primary: #FFFFFF;
+            --text-secondary: #98989F;
+            --card-bg: #1C1C1E;
+            --shadow-color: rgba(255, 255, 255, 0.05);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 
+                         'SF Pro Icons', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background: var(--background);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .waiting-container {
+            width: 100%;
+            max-width: 400px;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 4px 15px var(--shadow-color);
+            text-align: center;
+        }
+
+        h2 {
+            color: var(--text-primary);
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .status-text {
+            color: var(--text-secondary);
+            font-size: 15px;
+            margin: 20px 0;
+            font-weight: 400;
+        }
+
+        /* iMessage-style loading dots */
+        .typing-indicator {
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+            margin: 30px 0;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--imessage-blue);
+            border-radius: 50%;
+            opacity: 0.3;
+            animation: pulse 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes pulse {
+            0%, 60%, 100% { transform: scale(1); opacity: 0.3; }
+            30% { transform: scale(1.2); opacity: 1; }
+        }
+
+        #timer {
+            color: var(--imessage-blue);
+            font-size: 18px;
+            font-weight: 500;
+            margin-top: 20px;
+        }
+
+        /* iMessage bubble animation */
+        .message-bubble {
+            background: var(--imessage-blue);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 20px;
+            margin: 20px auto;
+            max-width: 80%;
+            opacity: 0;
+            animation: bubble-appear 0.3s ease forwards;
+        }
+
+        @keyframes bubble-appear {
+            from {
+                opacity: 0;
+                transform: translateY(10px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .waiting-container {
+                width: 90%;
+                padding: 20px;
+            }
+
+            .message-bubble {
+                max-width: 90%;
+            }
+
+            #timer {
+                font-size: 24px; /* Larger timer for mobile */
+            }
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        #theme-switch {
+            background: var(--card-bg);
+            border: none;
+            padding: 12px;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 10px var(--shadow-color);
+            transition: all 0.3s ease;
+        }
+
+        #theme-switch i {
+            color: var(--text-primary);
+            font-size: 18px;
+            transition: transform 0.3s ease;
+        }
+
+        #theme-switch:hover {
+            transform: scale(1.05);
+        }
+
+        #theme-switch.dark i {
+            transform: rotate(360deg);
+        }
+
+        @supports (-webkit-backdrop-filter: none) or (backdrop-filter: none) {
+            #theme-switch {
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+                background: var(--card-bg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="waiting-container">
+        <h2>Waiting for Approval</h2>
+        <p class="status-text">Your request has been sent to the chat members</p>
+        
+        <div class="typing-indicator">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+        </div>
+
+        <div class="message-bubble">
+            Requesting access to join the chat...
+        </div>
+        
+        <div id="timer">60</div>
+    </div>
+
+    <div class="theme-toggle">
+        <button id="theme-switch" aria-label="Toggle dark mode">
+            <i class="fas fa-moon"></i>
+        </button>
+    </div>
+
+    <script>
+        const socket = io();
+        let timeLeft = 60;
+        
+        // Emit join request when page loads
+        socket.emit('join_request', {
+            room: "{{ session['pending_approval'] }}",
+            user: "{{ session['display_name'] }}",
+            user_id: "{{ session['user_id'] }}"
+        });
+        
+        const timer = setInterval(() => {
+            timeLeft--;
+            document.getElementById('timer').textContent = timeLeft;
+            if (timeLeft <= 0) {
+                clearInterval(timer);
+                alert("Request timed out. Please try again.");
+                window.location.href = '/';
+            }
+        }, 1000);
+        
+        socket.on('join_approved', function(data) {
+            if (data.user_id === "{{ session['user_id'] }}") {
+                clearInterval(timer);
+                window.location.href = "/room/{{ session['pending_approval'] }}";
+            }
+        });
+
+        socket.on('join_denied', function(data) {
+            if (data.user_id === "{{ session['user_id'] }}") {
+                clearInterval(timer);
+                alert(data.reason || "Access denied");
+                window.location.href = '/';
+            }
+        });
+    </script>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const themeSwitch = document.getElementById('theme-switch');
+        const icon = themeSwitch.querySelector('i');
+        
+        // Check for saved theme preference or default to system preference
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            updateIcon(savedTheme);
+        }
+
+        themeSwitch.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            localStorage.setItem('theme', newTheme);
+            document.documentElement.setAttribute('data-theme', newTheme);
+            
+            updateIcon(newTheme);
+        });
+
+        function updateIcon(theme) {
+            if (theme === 'dark') {
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+                themeSwitch.classList.add('dark');
+            } else {
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+                themeSwitch.classList.remove('dark');
+            }
+        }
+    });
+    </script>
+</body>
+</html>
